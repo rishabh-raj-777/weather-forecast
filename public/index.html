@@ -1,0 +1,191 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Weather Forecast + Radar + 5-Day</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  
+  <!-- Leaflet CSS -->
+  <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
+  
+  <style>
+    body {
+      margin: 0;
+      font-family: 'Segoe UI', sans-serif;
+      background: linear-gradient(to right, #74ebd5, #ACB6E5);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 30px 10px;
+      color: #333;
+      min-height: 100vh;
+    }
+    h1 {
+      margin-bottom: 10px;
+      font-size: 2.5rem;
+    }
+    input, button {
+      padding: 10px;
+      margin: 5px;
+      font-size: 16px;
+      border-radius: 6px;
+      border: none;
+      outline: none;
+    }
+    button {
+      background-color: #4a90e2;
+      color: white;
+      cursor: pointer;
+    }
+    button:hover {
+      background-color: #357ABD;
+    }
+    #weatherContainer {
+      margin-top: 20px;
+      background: rgba(255, 255, 255, 0.9);
+      padding: 20px;
+      border-radius: 10px;
+      width: 90%;
+      max-width: 700px;
+      box-shadow: 0 0 15px rgba(0,0,0,0.1);
+      text-align: center;
+      display: none;
+    }
+    #map {
+      height: 300px;
+      width: 100%;
+      border-radius: 10px;
+      margin-top: 20px;
+    }
+    .weather-icon {
+      width: 80px;
+      vertical-align: middle;
+    }
+    #forecast {
+      margin-top: 20px;
+      text-align: left;
+      max-height: 300px;
+      overflow-x: auto;
+      white-space: nowrap;
+      padding-bottom: 10px;
+      border-top: 1px solid #ddd;
+      margin-top: 30px;
+    }
+    .hour-block {
+      display: inline-block;
+      width: 80px;
+      margin-right: 8px;
+      background: #f1f1f1;
+      border-radius: 8px;
+      padding: 10px 5px;
+      box-sizing: border-box;
+      text-align: center;
+      font-size: 14px;
+    }
+    .hour-block img {
+      display: block;
+      margin: 5px auto;
+    }
+    @media (max-width: 600px) {
+      h1 {
+        font-size: 2rem;
+      }
+    }
+  </style>
+</head>
+<body>
+
+  <h1>🌤 Live Weather Forecast + Radar</h1>
+  <input type="text" id="cityInput" placeholder="Enter city name" />
+  <button onclick="getWeather()">Get Weather</button>
+
+  <div id="weatherContainer">
+    <h2 id="cityName"></h2>
+    <img id="icon" class="weather-icon" src="" alt="Weather Icon" />
+    <p id="description"></p>
+    <p id="temperature"></p>
+    <div id="map"></div>
+    <div id="forecast"></div>
+  </div>
+
+  <!-- Leaflet JS -->
+  <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
+  <script>
+    const apiKey = "994f60db7c11da50fa9a121d95d88689";
+
+    async function getWeather() {
+      const city = document.getElementById("cityInput").value.trim();
+      if (!city) return alert("Please enter a city name");
+
+      // First get basic weather to retrieve lat/lon
+      const res = await fetch(`https://api.openweathermap.org/data/2.5/weather?q=${city}&appid=${apiKey}&units=metric`);
+      const data = await res.json();
+
+      if (data.cod !== 200) {
+        alert(data.message);
+        return;
+      }
+
+      document.getElementById("weatherContainer").style.display = "block";
+      document.getElementById("cityName").textContent = data.name;
+      document.getElementById("description").textContent = `☁️ ${data.weather[0].description}`;
+      document.getElementById("temperature").textContent = `🌡️ ${data.main.temp}°C`;
+      document.getElementById("icon").src = `https://openweathermap.org/img/wn/${data.weather[0].icon}@2x.png`;
+
+      const lat = data.coord.lat;
+      const lon = data.coord.lon;
+
+      // Use One Call API to get hourly & daily forecast
+      const oneCallRes = await fetch(`https://api.openweathermap.org/data/2.5/onecall?lat=${lat}&lon=${lon}&appid=${apiKey}&units=metric`);
+      const oneCallData = await oneCallRes.json();
+
+      // Render Map and Radar Overlay
+      setTimeout(() => {
+        if (window.map) {
+          window.map.setView([lat, lon], 10);
+          window.marker.setLatLng([lat, lon]);
+          window.map.invalidateSize();
+        } else {
+          window.map = L.map('map').setView([lat, lon], 10);
+          L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            attribution: '&copy; OpenStreetMap contributors'
+          }).addTo(window.map);
+          window.marker = L.marker([lat, lon]).addTo(window.map).bindPopup(data.name).openPopup();
+        }
+
+        // Radar (clouds) overlay tile layer from OpenWeatherMap
+        if (window.radarLayer) {
+          window.map.removeLayer(window.radarLayer);
+        }
+        window.radarLayer = L.tileLayer(`https://tile.openweathermap.org/map/clouds_new/{z}/{x}/{y}.png?appid=${apiKey}`, {
+          opacity: 0.5,
+          attribution: '&copy; OpenWeatherMap'
+        }).addTo(window.map);
+      }, 200);
+
+      // Render 5-day hourly forecast (next 5 days, 8 hours per day ~ 40 hours total)
+      const forecastContainer = document.getElementById("forecast");
+      forecastContainer.innerHTML = "<h3>5-Day Hourly Forecast</h3>";
+
+      // We'll show 40 hours (5 days * 8 hours)
+      const hoursToShow = 40;
+      for (let i = 0; i < hoursToShow && i < oneCallData.hourly.length; i++) {
+        const hourData = oneCallData.hourly[i];
+        const date = new Date(hourData.dt * 1000);
+        const hourStr = date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+        const icon = hourData.weather[0].icon;
+        const temp = hourData.temp.toFixed(1);
+
+        const hourBlock = document.createElement("div");
+        hourBlock.className = "hour-block";
+        hourBlock.innerHTML = `
+          <div>${hourStr}</div>
+          <img src="https://openweathermap.org/img/wn/${icon}.png" alt="${hourData.weather[0].description}" />
+          <div>${temp}°C</div>
+        `;
+        forecastContainer.appendChild(hourBlock);
+      }
+    }
+  </script>
+</body>
+</html>

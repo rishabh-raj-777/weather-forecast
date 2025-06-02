@@ -95,7 +95,7 @@
 </head>
 <body>
 
-  <h1>🌤 Live Weather Forecast + Radar</h1>
+  <h1>🌤 Live Weather Forecast</h1>
   <input type="text" id="cityInput" placeholder="Enter city name" />
   <button onclick="getWeather()">Get Weather</button>
 
@@ -117,7 +117,6 @@
       const city = document.getElementById("cityInput").value.trim();
       if (!city) return alert("Please enter a city name");
 
-      // First get basic weather to retrieve lat/lon
       const res = await fetch(`https://api.openweathermap.org/data/2.5/weather?q=${city}&appid=${apiKey}&units=metric`);
       const data = await res.json();
 
@@ -126,25 +125,25 @@
         return;
       }
 
-      document.getElementById("weatherContainer").style.display = "block";
+      const lat = data.coord.lat;
+      const lon = data.coord.lon;
+
+      const weatherContainer = document.getElementById("weatherContainer");
+      weatherContainer.style.display = "block";
+
       document.getElementById("cityName").textContent = data.name;
       document.getElementById("description").textContent = `☁️ ${data.weather[0].description}`;
       document.getElementById("temperature").textContent = `🌡️ ${data.main.temp}°C`;
       document.getElementById("icon").src = `https://openweathermap.org/img/wn/${data.weather[0].icon}@2x.png`;
 
-      const lat = data.coord.lat;
-      const lon = data.coord.lon;
-
-      // Use One Call API to get hourly & daily forecast
-      const oneCallRes = await fetch(`https://api.openweathermap.org/data/2.5/onecall?lat=${lat}&lon=${lon}&appid=${apiKey}&units=metric`);
-      const oneCallData = await oneCallRes.json();
-
-      // Render Map and Radar Overlay
       setTimeout(() => {
+        const mapElement = document.getElementById("map");
+        mapElement.style.height = "300px";
+
         if (window.map) {
           window.map.setView([lat, lon], 10);
           window.marker.setLatLng([lat, lon]);
-          window.map.invalidateSize();
+          setTimeout(() => window.map.invalidateSize(), 100);
         } else {
           window.map = L.map('map').setView([lat, lon], 10);
           L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
@@ -153,7 +152,6 @@
           window.marker = L.marker([lat, lon]).addTo(window.map).bindPopup(data.name).openPopup();
         }
 
-        // Radar (clouds) overlay tile layer from OpenWeatherMap
         if (window.radarLayer) {
           window.map.removeLayer(window.radarLayer);
         }
@@ -161,13 +159,15 @@
           opacity: 0.5,
           attribution: '&copy; OpenWeatherMap'
         }).addTo(window.map);
-      }, 200);
+      }, 300);
 
-      // Render 5-day hourly forecast (next 5 days, 8 hours per day ~ 40 hours total)
+      // Get 5-day hourly forecast
+      const oneCallRes = await fetch(`https://api.openweathermap.org/data/2.5/onecall?lat=${lat}&lon=${lon}&appid=${apiKey}&units=metric`);
+      const oneCallData = await oneCallRes.json();
+
       const forecastContainer = document.getElementById("forecast");
       forecastContainer.innerHTML = "<h3>5-Day Hourly Forecast</h3>";
 
-      // We'll show 40 hours (5 days * 8 hours)
       const hoursToShow = 40;
       for (let i = 0; i < hoursToShow && i < oneCallData.hourly.length; i++) {
         const hourData = oneCallData.hourly[i];

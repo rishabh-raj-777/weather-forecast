@@ -2,190 +2,122 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <title>Weather Forecast + Radar + 5-Day</title>
+  <title>Weather * map</title>
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  
+
   <!-- Leaflet CSS -->
   <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
-  
+
   <style>
-    body {
+    html, body {
       margin: 0;
+      padding: 0;
+      height: 100%;
       font-family: 'Segoe UI', sans-serif;
-      background: linear-gradient(to right, #74ebd5, #ACB6E5);
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      padding: 30px 10px;
-      color: #333;
-      min-height: 100vh;
+      overflow: hidden;
     }
-    h1 {
-      margin-bottom: 10px;
-      font-size: 2.5rem;
+
+    #map {
+      position: absolute;
+      top: 0; left: 0;
+      width: 100%;
+      height: 100%;
+      z-index: 0;
     }
+
+    .content {
+      position: relative;
+      z-index: 2;
+      padding: 20px;
+      max-width: 600px;
+      margin: 20px auto;
+      background: rgba(255, 255, 255, 0.85);
+      border-radius: 12px;
+      text-align: center;
+      box-shadow: 0 0 10px rgba(0,0,0,0.2);
+    }
+
     input, button {
       padding: 10px;
-      margin: 5px;
+      margin: 10px 5px;
       font-size: 16px;
       border-radius: 6px;
-      border: none;
-      outline: none;
+      border: 1px solid #ccc;
     }
+
     button {
       background-color: #4a90e2;
       color: white;
       cursor: pointer;
     }
+
     button:hover {
       background-color: #357ABD;
-    }
-    #weatherContainer {
-      margin-top: 20px;
-      background: rgba(255, 255, 255, 0.9);
-      padding: 20px;
-      border-radius: 10px;
-      width: 90%;
-      max-width: 700px;
-      box-shadow: 0 0 15px rgba(0,0,0,0.1);
-      text-align: center;
-      display: none;
-    }
-    #map {
-      height: 300px;
-      width: 100%;
-      border-radius: 10px;
-      margin-top: 20px;
-    }
-    .weather-icon {
-      width: 80px;
-      vertical-align: middle;
-    }
-    #forecast {
-      margin-top: 20px;
-      text-align: left;
-      max-height: 300px;
-      overflow-x: auto;
-      white-space: nowrap;
-      padding-bottom: 10px;
-      border-top: 1px solid #ddd;
-      margin-top: 30px;
-    }
-    .hour-block {
-      display: inline-block;
-      width: 80px;
-      margin-right: 8px;
-      background: #f1f1f1;
-      border-radius: 8px;
-      padding: 10px 5px;
-      box-sizing: border-box;
-      text-align: center;
-      font-size: 14px;
-    }
-    .hour-block img {
-      display: block;
-      margin: 5px auto;
-    }
-    @media (max-width: 600px) {
-      h1 {
-        font-size: 2rem;
-      }
     }
   </style>
 </head>
 <body>
 
-  <h1>🌤 Live Weather Forecast</h1>
-  <input type="text" id="cityInput" placeholder="Enter city name" />
+<div id="map"></div>
+
+<div class="content">
+  <h1>🌤 Weather Finder</h1>
+  <input type="text" id="cityInput" placeholder="Enter city name">
   <button onclick="getWeather()">Get Weather</button>
 
-  <div id="weatherContainer">
-    <h2 id="cityName"></h2>
-    <img id="icon" class="weather-icon" src="" alt="Weather Icon" />
-    <p id="description"></p>
-    <p id="temperature"></p>
-    <div id="map"></div>
-    <div id="forecast"></div>
+  <div id="weatherDisplay" style="margin-top: 20px; display: none;">
+    <h2 id="locationName"></h2>
+    <p id="temp"></p>
+    <p id="summary"></p>
   </div>
+</div>
 
-  <!-- Leaflet JS -->
-  <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
-  <script>
-    const apiKey = "ENTER-YOUR-API-KEY";
+<!-- Leaflet JS -->
+<script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
 
-    async function getWeather() {
-      const city = document.getElementById("cityInput").value.trim();
-      if (!city) return alert("Please enter a city name");
+<script>
+  let map, marker;
 
-      const res = await fetch(`https://api.openweathermap.org/data/2.5/weather?q=${city}&appid=${apiKey}&units=metric`);
-      const data = await res.json();
+  async function getWeather() {
+    const city = document.getElementById('cityInput').value.trim();
+    if (!city) return alert("Please enter a city");
 
-      if (data.cod !== 200) {
-        alert(data.message);
-        return;
-      }
+    // Geocoding to get lat/lon
+    const geoRes = await fetch(`https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(city)}`);
+    const geoData = await geoRes.json();
 
-      const lat = data.coord.lat;
-      const lon = data.coord.lon;
-
-      const weatherContainer = document.getElementById("weatherContainer");
-      weatherContainer.style.display = "block";
-
-      document.getElementById("cityName").textContent = data.name;
-      document.getElementById("description").textContent = `☁️ ${data.weather[0].description}`;
-      document.getElementById("temperature").textContent = `🌡️ ${data.main.temp}°C`;
-      document.getElementById("icon").src = `https://openweathermap.org/img/wn/${data.weather[0].icon}@2x.png`;
-
-      setTimeout(() => {
-        const mapElement = document.getElementById("map");
-        mapElement.style.height = "300px";
-
-        if (window.map) {
-          window.map.setView([lat, lon], 10);
-          window.marker.setLatLng([lat, lon]);
-          setTimeout(() => window.map.invalidateSize(), 100);
-        } else {
-          window.map = L.map('map').setView([lat, lon], 10);
-          L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-            attribution: '&copy; OpenStreetMap contributors'
-          }).addTo(window.map);
-          window.marker = L.marker([lat, lon]).addTo(window.map).bindPopup(data.name).openPopup();
-        }
-
-        if (window.radarLayer) {
-          window.map.removeLayer(window.radarLayer);
-        }
-        window.radarLayer = L.tileLayer(`https://tile.openweathermap.org/map/clouds_new/{z}/{x}/{y}.png?appid=${apiKey}`, {
-          opacity: 0.5,
-          attribution: '&copy; OpenWeatherMap'
-        }).addTo(window.map);
-      }, 300);
-
-      // Get 5-day hourly forecast
-      const oneCallRes = await fetch(`https://api.openweathermap.org/data/2.5/onecall?lat=${lat}&lon=${lon}&appid=${apiKey}&units=metric`);
-      const oneCallData = await oneCallRes.json();
-
-      const forecastContainer = document.getElementById("forecast");
-      forecastContainer.innerHTML = "<h3>5-Day Hourly Forecast</h3>";
-
-      const hoursToShow = 40;
-      for (let i = 0; i < hoursToShow && i < oneCallData.hourly.length; i++) {
-        const hourData = oneCallData.hourly[i];
-        const date = new Date(hourData.dt * 1000);
-        const hourStr = date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-        const icon = hourData.weather[0].icon;
-        const temp = hourData.temp.toFixed(1);
-
-        const hourBlock = document.createElement("div");
-        hourBlock.className = "hour-block";
-        hourBlock.innerHTML = `
-          <div>${hourStr}</div>
-          <img src="https://openweathermap.org/img/wn/${icon}.png" alt="${hourData.weather[0].description}" />
-          <div>${temp}°C</div>
-        `;
-        forecastContainer.appendChild(hourBlock);
-      }
+    if (!geoData.results || geoData.results.length === 0) {
+      alert("City not found");
+      return;
     }
-  </script>
+
+    const { latitude, longitude, name, country } = geoData.results[0];
+
+    // Fetch weather data
+    const weatherRes = await fetch(`https://api.open-meteo.com/v1/forecast?latitude=${latitude}&longitude=${longitude}&current=temperature_2m,weathercode&timezone=auto`);
+    const weatherData = await weatherRes.json();
+
+    const temp = weatherData.current.temperature_2m;
+    const code = weatherData.current.weathercode;
+
+    document.getElementById("locationName").textContent = `${name}, ${country}`;
+    document.getElementById("temp").textContent = `🌡️ ${temp}°C`;
+    document.getElementById("summary").textContent = `Weather Code: ${code}`;
+    document.getElementById("weatherDisplay").style.display = 'block';
+
+    // Initialize or update map
+    if (!map) {
+      map = L.map('map').setView([latitude, longitude], 8);
+      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        attribution: '&copy; OpenStreetMap contributors'
+      }).addTo(map);
+      marker = L.marker([latitude, longitude]).addTo(map).bindPopup(`${name}`).openPopup();
+    } else {
+      map.setView([latitude, longitude], 8);
+      marker.setLatLng([latitude, longitude]).setPopupContent(name).openPopup();
+    }
+  }
+</script>
+
 </body>
 </html>
